@@ -594,7 +594,9 @@ NSUInteger GetMaxSampleRate(const webrtc::H264::ProfileLevelId &profile_level_id
   // buffers retrieved from the encoder's pixel buffer pool.
   const size_t attributesSize = 3;
   CFTypeRef keys[attributesSize] = {
-#if defined(WEBRTC_IOS)
+#if defined(WEBRTC_IOS) && TARGET_OS_MACCATALYST
+    kCVPixelBufferMetalCompatibilityKey,
+#elif defined(WEBRTC_IOS)
     kCVPixelBufferOpenGLESCompatibilityKey,
 #elif defined(WEBRTC_MAC)
     kCVPixelBufferOpenGLCompatibilityKey,
@@ -802,10 +804,8 @@ NSUInteger GetMaxSampleRate(const webrtc::H264::ProfileLevelId &profile_level_id
                                                                   RTCVideoContentTypeUnspecified;
   frame.flags = webrtc::VideoSendTiming::kInvalid;
 
-  int qp;
-  _h264BitstreamParser.ParseBitstream(buffer->data(), buffer->size());
-  _h264BitstreamParser.GetLastSliceQp(&qp);
-  frame.qp = @(qp);
+  _h264BitstreamParser.ParseBitstream(*buffer);
+  frame.qp = @(_h264BitstreamParser.GetLastSliceQp().value_or(-1));
 
   BOOL res = _callback(frame, codecSpecificInfo);
   if (!res) {

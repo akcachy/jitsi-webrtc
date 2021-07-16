@@ -31,7 +31,8 @@ SDK_OUTPUT_DIR = os.path.join(SRC_DIR, 'out_ios_libs')
 SDK_FRAMEWORK_NAME = 'WebRTC.framework'
 
 DEFAULT_ARCHS = ENABLED_ARCHS = ['arm64', 'arm', 'x64', 'x86']
-IOS_DEPLOYMENT_TARGET = '10.0'
+# RingRTC change to control iOS target
+IOS_DEPLOYMENT_TARGET = '11.0'
 LIBVPX_BUILD_VP9 = False
 
 sys.path.append(os.path.join(SCRIPT_DIR, '..', 'libs'))
@@ -124,7 +125,8 @@ def BuildWebRTC(output_dir, target_arch, flavor, gn_target_name,
     output_dir = os.path.join(output_dir, target_arch + '_libs')
     gn_args = [
         'target_os="ios"', 'ios_enable_code_signing=false',
-        'use_xcode_clang=true', 'is_component_build=false'
+        'use_xcode_clang=true', 'is_component_build=false',
+        'rtc_include_tests=false',
     ]
 
     # Add flavor option.
@@ -145,6 +147,7 @@ def BuildWebRTC(output_dir, target_arch, flavor, gn_target_name,
     gn_args.append('enable_ios_bitcode=' +
                    ('true' if use_bitcode else 'false'))
     gn_args.append('use_goma=' + ('true' if use_goma else 'false'))
+    gn_args.append('rtc_enable_symbol_export=true')
 
     args_string = ' '.join(gn_args + extra_gn_args)
     logging.info('Building WebRTC with args: %s', args_string)
@@ -206,12 +209,18 @@ def main():
     dylib_path = os.path.join(SDK_FRAMEWORK_NAME, 'WebRTC')
     # Dylibs will be combined, all other files are the same across archs.
     # Use distutils instead of shutil to support merging folders.
+    distutils.dir_util.remove_tree(
+        os.path.join(args.output_dir, SDK_FRAMEWORK_NAME))
     distutils.dir_util.copy_tree(
         os.path.join(lib_paths[0], SDK_FRAMEWORK_NAME),
-        os.path.join(args.output_dir, SDK_FRAMEWORK_NAME))
+        os.path.join(args.output_dir, SDK_FRAMEWORK_NAME),
+        preserve_symlinks=True)
     logging.info('Merging framework slices.')
     dylib_paths = [os.path.join(path, dylib_path) for path in lib_paths]
     out_dylib_path = os.path.join(args.output_dir, dylib_path)
+    if os.path.islink(out_dylib_path):
+        out_dylib_path = os.path.join(os.path.dirname(out_dylib_path),
+                                      os.readlink(out_dylib_path))
     try:
         os.remove(out_dylib_path)
     except OSError:
@@ -237,20 +246,23 @@ def main():
         _RunCommand(cmd)
 
         # Generate the license file.
+        resources_dir = os.path.join(args.output_dir, SDK_FRAMEWORK_NAME,
+                                     'Resources')
+        if not os.path.exists(resources_dir):
+            resources_dir = os.path.dirname(resources_dir)
+
         ninja_dirs = [
             os.path.join(args.output_dir, arch + '_libs')
             for arch in architectures
         ]
         gn_target_full_name = '//sdk:' + gn_target_name
         builder = LicenseBuilder(ninja_dirs, [gn_target_full_name])
-        builder.GenerateLicenseText(
-            os.path.join(args.output_dir, SDK_FRAMEWORK_NAME))
+        builder.GenerateLicenseText(resources_dir)
 
         # Modify the version number.
         # Format should be <Branch cut MXX>.<Hotfix #>.<Rev #>.
         # e.g. 55.0.14986 means branch cut 55, no hotfixes, and revision 14986.
-        infoplist_path = os.path.join(args.output_dir, SDK_FRAMEWORK_NAME,
-                                      'Info.plist')
+        infoplist_path = os.path.join(resources_dir, 'Info.plist')
         cmd = [
             'PlistBuddy', '-c', 'Print :CFBundleShortVersionString',
             infoplist_path

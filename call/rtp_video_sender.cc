@@ -290,15 +290,6 @@ std::vector<RtpStreamSender> CreateRtpStreamSenders(
   return rtp_streams;
 }
 
-DataRate CalculateOverheadRate(DataRate data_rate,
-                               DataSize packet_size,
-                               DataSize overhead_per_packet) {
-  Frequency packet_rate = data_rate / packet_size;
-  // TOSO(srte): We should not need to round to nearest whole packet per second
-  // rate here.
-  return packet_rate.RoundUpTo(Frequency::Hertz(1)) * overhead_per_packet;
-}
-
 absl::optional<VideoCodecType> GetVideoCodecType(const RtpConfig& config) {
   if (config.raw_payload) {
     return absl::nullopt;
@@ -310,6 +301,38 @@ bool TransportSeqNumExtensionConfigured(const RtpConfig& config) {
     return ext.uri == RtpExtension::kTransportSequenceNumberUri;
   });
 }
+
+// Returns true when some coded video sequence can be decoded starting with
+// this frame without requiring any previous frames.
+// e.g. it is the same as a key frame when spatial scalability is not used.
+// When spatial scalability is used, then it is true for layer frames of
+// a key frame without inter-layer dependencies.
+bool IsFirstFrameOfACodedVideoSequence(
+    const EncodedImage& encoded_image,
+    const CodecSpecificInfo* codec_specific_info) {
+  if (encoded_image._frameType != VideoFrameType::kVideoFrameKey) {
+    return false;
+  }
+
+  if (codec_specific_info != nullptr &&
+      codec_specific_info->generic_frame_info.has_value()) {
+    // This function is used before
+    // `codec_specific_info->generic_frame_info->frame_diffs` are calculated, so
+    // need to use more complicated way to check for presence of dependencies.
+    return absl::c_none_of(
+        codec_specific_info->generic_frame_info->encoder_buffers,
+        [](const CodecBufferUsage& buffer) { return buffer.referenced; });
+  }
+
+  // Without depenedencies described in generic format do an educated guess.
+  // It might be wrong for VP9 with spatial layer 0 skipped or higher spatial
+  // layer not depending on the spatial layer 0. This corner case is unimportant
+  // for current usage of this helper function.
+
+  // Use <= to accept both 0 (i.e. the first) and nullopt (i.e. the only).
+  return encoded_image.SpatialIndex() <= 0;
+}
+
 }  // namespace
 
 RtpVideoSender::RtpVideoSender(
@@ -330,6 +353,9 @@ RtpVideoSender::RtpVideoSender(
     : send_side_bwe_with_overhead_(!absl::StartsWith(
           field_trials_.Lookup("WebRTC-SendSideBwe-WithOverhead"),
           "Disabled")),
+      use_frame_rate_for_overhead_(absl::StartsWith(
+          field_trials_.Lookup("WebRTC-Video-UseFrameRateForOverhead"),
+          "Enabled")),
       has_packet_feedback_(TransportSeqNumExtensionConfigured(rtp_config)),
       active_(false),
       module_process_thread_(nullptr),
@@ -532,7 +558,7 @@ EncodedImageCallback::Result RtpVideoSender::OnEncodedImage(
         rtp_streams_[stream_index].rtp_rtcp->ExpectedRetransmissionTimeMs();
   }
 
-  if (encoded_image._frameType == VideoFrameType::kVideoFrameKey) {
+  if (IsFirstFrameOfACodedVideoSequence(encoded_image, codec_specific_info)) {
     // If encoder adapter produce FrameDependencyStructure, pass it so that
     // dependency descriptor rtp header extension can be used.
     // If not supported, disable using dependency descriptor by passing nullptr.
@@ -766,8 +792,9 @@ void RtpVideoSender::OnBitrateUpdated(BitrateAllocationUpdate update,
       rtp_config_.max_packet_size + transport_overhead_bytes_per_packet_);
   uint32_t payload_bitrate_bps = update.target_bitrate.bps();
   if (send_side_bwe_with_overhead_ && has_packet_feedback_) {
-    DataRate overhead_rate = CalculateOverheadRate(
-        update.target_bitrate, max_total_packet_size, packet_overhead);
+    DataRate overhead_rate =
+        CalculateOverheadRate(update.target_bitrate, max_total_packet_size,
+                              packet_overhead, Frequency::Hertz(framerate));
     // TODO(srte): We probably should not accept 0 payload bitrate here.
     payload_bitrate_bps = rtc::saturated_cast<uint32_t>(payload_bitrate_bps -
                                                         overhead_rate.bps());
@@ -806,7 +833,7 @@ void RtpVideoSender::OnBitrateUpdated(BitrateAllocationUpdate update,
     DataRate encoder_overhead_rate = CalculateOverheadRate(
         DataRate::BitsPerSec(encoder_target_rate_bps_),
         max_total_packet_size - DataSize::Bytes(overhead_bytes_per_packet),
-        packet_overhead);
+        packet_overhead, Frequency::Hertz(framerate));
     encoder_overhead_rate_bps = std::min(
         encoder_overhead_rate.bps<uint32_t>(),
         update.target_bitrate.bps<uint32_t>() - encoder_target_rate_bps_);
@@ -927,4 +954,19 @@ void RtpVideoSender::SetEncodingData(size_t width,
   fec_controller_->SetEncodingData(width, height, num_temporal_layers,
                                    rtp_config_.max_packet_size);
 }
+
+DataRate RtpVideoSender::CalculateOverheadRate(DataRate data_rate,
+                                               DataSize packet_size,
+                                               DataSize overhead_per_packet,
+                                               Frequency framerate) const {
+  Frequency packet_rate = data_rate / packet_size;
+  if (use_frame_rate_for_overhead_) {
+    framerate = std::max(framerate, Frequency::Hertz(1));
+    DataSize frame_size = data_rate / framerate;
+    int packets_per_frame = ceil(frame_size / packet_size);
+    packet_rate = packets_per_frame * framerate;
+  }
+  return packet_rate.RoundUpTo(Frequency::Hertz(1)) * overhead_per_packet;
+}
+
 }  // namespace webrtc

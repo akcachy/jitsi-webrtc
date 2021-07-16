@@ -124,7 +124,7 @@ class PeerConnection : public PeerConnectionInternal,
   //
   // Note that the function takes ownership of dependencies, and will
   // either use them or release them, whether it succeeds or fails.
-  static rtc::scoped_refptr<PeerConnection> Create(
+  static RTCErrorOr<rtc::scoped_refptr<PeerConnection>> Create(
       rtc::scoped_refptr<ConnectionContext> context,
       const PeerConnectionFactoryInterface::Options& options,
       std::unique_ptr<RtcEventLog> event_log,
@@ -238,6 +238,17 @@ class PeerConnection : public PeerConnectionInternal,
                        std::function<void(RTCError)> callback) override;
   bool RemoveIceCandidates(
       const std::vector<cricket::Candidate>& candidates) override;
+  // RingRTC change to add methods (see interface header)
+  rtc::scoped_refptr<webrtc::IceGathererInterface> CreateSharedIceGatherer()
+      override;
+  bool UseSharedIceGatherer(rtc::scoped_refptr<webrtc::IceGathererInterface>
+                                shared_ice_gatherer) override;
+  bool SetIncomingRtpEnabled(bool enabled) override;
+
+  bool SendRtp(std::unique_ptr<RtpPacket> rtp_packet) override;
+  bool ReceiveRtp(uint8_t pt) override;
+
+  void ConfigureAudioEncoders(const webrtc::AudioEncoder::Config& config) override;
 
   RTCError SetBitrate(const BitrateSettings& bitrate) override;
 
@@ -447,6 +458,10 @@ class PeerConnection : public PeerConnectionInternal,
   }
   void RequestUsagePatternReportForTesting();
 
+  rtc::scoped_refptr<IceGathererInterface> shared_ice_gatherer() {
+      return shared_ice_gatherer_;
+  }
+
  protected:
   // Available for rtc::scoped_refptr creation
   PeerConnection(rtc::scoped_refptr<ConnectionContext> context,
@@ -459,7 +474,7 @@ class PeerConnection : public PeerConnectionInternal,
   ~PeerConnection() override;
 
  private:
-  bool Initialize(
+  RTCError Initialize(
       const PeerConnectionInterface::RTCConfiguration& configuration,
       PeerConnectionDependencies dependencies);
 
@@ -691,6 +706,9 @@ class PeerConnection : public PeerConnectionInternal,
   // Administration of senders, receivers and transceivers
   // Accessed on both signaling and network thread. Const after Initialize().
   std::unique_ptr<RtpTransmissionManager> rtp_manager_;
+
+  // RingRTC change to add ICE forking
+  rtc::scoped_refptr<webrtc::IceGathererInterface> shared_ice_gatherer_;
 };
 
 }  // namespace webrtc

@@ -99,8 +99,8 @@ class SendSideBandwidthEstimation {
   void UpdateDelayBasedEstimate(Timestamp at_time, DataRate bitrate);
 
   // Call when we receive a RTCP message with a ReceiveBlock.
-  void UpdatePacketsLost(int packets_lost,
-                         int number_of_packets,
+  void UpdatePacketsLost(int64_t packets_lost,
+                         int64_t number_of_packets,
                          Timestamp at_time);
 
   // Call when we receive a RTCP message with a ReceiveBlock.
@@ -192,6 +192,7 @@ class SendSideBandwidthEstimation {
   float high_loss_threshold_;
   DataRate bitrate_threshold_;
   LossBasedBandwidthEstimation loss_based_bandwidth_estimation_;
+  FieldTrialFlag receiver_limit_caps_only_;
 };
 }  // namespace webrtc
 #endif  // MODULES_CONGESTION_CONTROLLER_GOOG_CC_SEND_SIDE_BANDWIDTH_ESTIMATION_H_

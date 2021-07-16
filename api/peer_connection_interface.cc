@@ -12,6 +12,7 @@
 
 #include "api/dtls_transport_interface.h"
 #include "api/sctp_transport_interface.h"
+#include "rtc_base/logging.h"
 
 namespace webrtc {
 
@@ -53,6 +54,38 @@ RTCError PeerConnectionInterface::SetConfiguration(
   return RTCError();
 }
 
+// RingRTC change to add ICE forking
+rtc::scoped_refptr<webrtc::IceGathererInterface>
+PeerConnectionInterface::CreateSharedIceGatherer() {
+  RTC_LOG(LS_ERROR) << "No shared ICE gatherer in dummy implementation";
+  return nullptr;
+}
+
+// RingRTC change to add ICE forking
+bool PeerConnectionInterface::UseSharedIceGatherer(
+    rtc::scoped_refptr<webrtc::IceGathererInterface> shared_ice_gatherer) {
+  RTC_LOG(LS_ERROR) << "No shared ICE gatherer in dummy implementation";
+  return false;
+}
+
+// RingRTC change to RTP from being processed before the call is accepted
+bool PeerConnectionInterface::SetIncomingRtpEnabled(bool enabled) {
+  RTC_LOG(LS_ERROR) << "No enabling of incoming RTP in dummy implementation";
+  return false;
+}
+
+// RingRTC change to send RTP data
+bool PeerConnectionInterface::SendRtp(std::unique_ptr<RtpPacket> rtp_packet) {
+  RTC_LOG(LS_ERROR) << "No SendRtp in dummy implementation";
+  return false;
+}
+
+// RingRTC change to receive RTP data
+bool PeerConnectionInterface::ReceiveRtp(uint8_t pt) {
+  RTC_LOG(LS_ERROR) << "No SendRtp in dummy implementation";
+  return false;
+}
+
 PeerConnectionDependencies::PeerConnectionDependencies(
     PeerConnectionObserver* observer_in)
     : observer(observer_in) {}
@@ -85,6 +118,13 @@ PeerConnectionFactoryInterface::CreatePeerConnection(
     const PeerConnectionInterface::RTCConfiguration& configuration,
     PeerConnectionDependencies dependencies) {
   return nullptr;
+}
+
+RTCErrorOr<rtc::scoped_refptr<PeerConnectionInterface>>
+PeerConnectionFactoryInterface::CreatePeerConnectionOrError(
+    const PeerConnectionInterface::RTCConfiguration& configuration,
+    PeerConnectionDependencies dependencies) {
+  return RTCError(RTCErrorType::INTERNAL_ERROR);
 }
 
 RtpCapabilities PeerConnectionFactoryInterface::GetRtpSenderCapabilities(

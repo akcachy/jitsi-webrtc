@@ -423,7 +423,7 @@ if (is_ios || is_mac) {
       ]
     }
 
-    rtc_library("video_objc") {
+    rtc_library("opengl_objc") {
       sources = [
         "objc/components/renderer/opengl/RTCDefaultShader.h",
         "objc/components/renderer/opengl/RTCDefaultShader.mm",
@@ -475,7 +475,7 @@ if (is_ios || is_mac) {
       ]
     }
 
-    rtc_library("ui_objc") {
+    rtc_library("opengl_ui_objc") {
       visibility = [ "*" ]
       allow_poison = [ "audio_codecs" ]  # TODO(bugs.webrtc.org/8396): Remove.
       if (is_ios) {
@@ -496,7 +496,7 @@ if (is_ios || is_mac) {
       deps = [
         ":base_objc",
         ":helpers_objc",
-        ":video_objc",
+        ":opengl_objc",
         ":videocapture_objc",
         ":videoframebuffer_objc",
       ]
@@ -541,7 +541,6 @@ if (is_ios || is_mac) {
         deps = [
           ":base_objc",
           ":peerconnectionfactory_base_objc",
-          ":video_objc",
           ":videoframebuffer_objc",
           "../api/video:video_frame",
           "../api/video:video_rtp_headers",
@@ -590,7 +589,6 @@ if (is_ios || is_mac) {
       deps = [
         ":base_objc",
         ":helpers_objc",
-        ":video_objc",
         ":videoframebuffer_objc",
         "../rtc_base/system:gcd_helpers",
       ]
@@ -621,7 +619,6 @@ if (is_ios || is_mac) {
         "../common_video",
         "../media:rtc_h264_profile_id",
         "../media:rtc_media_base",
-        "../modules:module_api",
         "../modules/video_coding:video_codec_interface",
         "../rtc_base:checks",
         "../rtc_base:rtc_base_approved",
@@ -810,7 +807,6 @@ if (is_ios || is_mac) {
         ":helpers_objc",
         "../api/video:encoded_image",
         "../api/video_codecs:video_codecs_api",
-        "../modules:module_api",
         "../modules/video_coding:video_codec_interface",
         "../rtc_base",
       ]
@@ -944,7 +940,6 @@ if (is_ios || is_mac) {
         ":mediasource_objc",
         ":native_api",
         ":native_video",
-        ":video_objc",
         ":videoframebuffer_objc",
         ":videorendereradapter_objc",
         ":videosource_objc",
@@ -968,7 +963,6 @@ if (is_ios || is_mac) {
         "../api/video_codecs:video_codecs_api",
         "../common_video",
         "../media:rtc_media_base",
-        "../modules:module_api",
         "../modules/audio_device:audio_device_api",
         "../modules/audio_processing",
         "../modules/audio_processing:api",
@@ -1026,7 +1020,6 @@ if (is_ios || is_mac) {
             ":native_api_audio_device_module",
             ":native_video",
             ":peerconnectionfactory_base_objc",
-            ":video_objc",
             ":video_toolbox_cc",
             ":videocapture_objc",
             ":videocodec_objc",
@@ -1039,12 +1032,15 @@ if (is_ios || is_mac) {
             "../common_video",
             "../media:rtc_media_base",
             "../media:rtc_media_tests_utils",
-            "../modules:module_api",
             "../rtc_base",
             "../rtc_base:gunit_helpers",
             "../system_wrappers",
             "//third_party/libyuv",
           ]
+
+          if (rtc_use_opengl_rendering) {
+            deps += [ ":opengl_objc" ]
+          }
 
           if (rtc_use_metal_rendering) {
             sources += [ "objc/unittests/RTCMTLVideoView_xctest.m" ]
@@ -1140,7 +1136,6 @@ if (is_ios || is_mac) {
           ":native_api",
           ":native_video",
           ":peerconnectionfactory_base_objc",
-          ":video_objc",
           ":videocapture_objc",
           ":videocodec_objc",
           ":videoframebuffer_objc",
@@ -1152,7 +1147,6 @@ if (is_ios || is_mac) {
           "../api/audio_codecs:builtin_audio_encoder_factory",
           "../api/video_codecs:video_codecs_api",
           "../media:rtc_media_base",
-          "../modules:module_api",
           "../modules/audio_device:audio_device_api",
           "../modules/audio_processing",
           "../modules/audio_processing:api",
@@ -1282,12 +1276,15 @@ if (is_ios || is_mac) {
           ":native_api",
           ":native_video",
           ":peerconnectionfactory_base_objc",
-          ":ui_objc",
           ":videocapture_objc",
           ":videocodec_objc",
           ":videotoolbox_objc",
           "../rtc_base:rtc_base_approved",
+          "../ringrtc/rffi:libringrtc_rffi",
         ]
+        if (rtc_use_opengl_rendering) {
+          deps += [ ":opengl_ui_objc" ]
+        }
         if (rtc_use_metal_rendering) {
           deps += [ ":metal_objc" ]
         }
@@ -1302,7 +1299,6 @@ if (is_ios || is_mac) {
           "AVFoundation.framework",
           "CoreGraphics.framework",
           "CoreMedia.framework",
-          "GLKit.framework",
         ]
 
         configs += [
@@ -1413,8 +1409,8 @@ if (is_ios || is_mac) {
           ":default_codec_factory_objc",
           ":native_api",
           ":native_video",
+          ":opengl_ui_objc",
           ":peerconnectionfactory_base_objc",
-          ":ui_objc",
           ":videocapture_objc",
           ":videocodec_objc",
           ":videotoolbox_objc",
@@ -1564,7 +1560,6 @@ if (is_ios || is_mac) {
         "../common_video",
         "../media:rtc_audio_video",
         "../media:rtc_media_base",
-        "../modules:module_api",
         "../modules/video_coding:video_codec_interface",
         "../rtc_base",
         "../rtc_base:checks",
@@ -1584,7 +1579,6 @@ if (is_ios || is_mac) {
       ]
       deps = [
         "../common_video",
-        "../modules:module_api",
         "../modules/video_coding:webrtc_h264",
         "../rtc_base:checks",
         "../rtc_base:rtc_base_approved",
@@ -1622,7 +1616,6 @@ if (is_ios || is_mac) {
         ":videocodec_objc",
         ":videoframebuffer_objc",
         "../common_video",
-        "../modules:module_api",
         "../modules/video_coding:video_codec_interface",
         "../rtc_base:checks",
         "../rtc_base:rtc_base_approved",
